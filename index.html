@@ -53,7 +53,6 @@ const CHECK_INTERVAL_MS = 60 * 1000; // 1 minuto
 
 const audio = document.getElementById("radio");
 let currentUrl = null;
-let autoplayBloqueado = false;
 
 function parseCsvCell(text) {
   let t = text.trim();
@@ -72,22 +71,6 @@ async function obtenerUrlDeSheet() {
   return url;
 }
 
-function intentarReproducir() {
-  // Truco: los navegadores SIEMPRE permiten autoplay si empieza muteado.
-  // Una vez que ya está sonando, le quitamos el mute (eso no vuelve a
-  // activar el bloqueo de autoplay).
-  audio.muted = true;
-  const p = audio.play();
-  if (p && p.catch) {
-    p.then(() => {
-      autoplayBloqueado = false;
-      setTimeout(() => { audio.muted = false; }, 250);
-    }).catch(() => {
-      autoplayBloqueado = true;
-    });
-  }
-}
-
 async function actualizarEstacion(esPrimeraCarga) {
   try {
     const url = await obtenerUrlDeSheet();
@@ -96,19 +79,12 @@ async function actualizarEstacion(esPrimeraCarga) {
       const estabaSonando = !audio.paused;
       audio.src = url;
       audio.load();
-      if (esPrimeraCarga || estabaSonando) intentarReproducir();
+      if (esPrimeraCarga || estabaSonando) audio.play().catch(() => {});
     }
   } catch (err) {
     console.error(err);
   }
 }
-
-// Respaldo: si el navegador bloqueó incluso el autoplay muteado (poco
-// común), el primer toque en la página lo activa, sin mostrar botón.
-document.addEventListener("click", () => {
-  if (autoplayBloqueado) intentarReproducir();
-  else if (audio.muted) audio.muted = false;
-}, { once: false });
 
 audio.addEventListener("stalled", () => audio.load());
 
