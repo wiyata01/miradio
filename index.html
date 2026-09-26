@@ -14,16 +14,14 @@
     padding: 0;
     height: 100%;
     background: #111;
+    overflow: hidden;
   }
 
-  body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  audio {
-    width: min(90%, 420px);
+  iframe {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
   }
 
 </style>
@@ -31,7 +29,12 @@
 
 <body>
 
-<audio id="radio" controls autoplay preload="auto"></audio>
+<iframe
+  id="radioFrame"
+  allow="autoplay; encrypted-media"
+  allowfullscreen
+  src="about:blank">
+</iframe>
 
 <script>
 
@@ -51,7 +54,7 @@ const CHECK_INTERVAL_MS = 60 * 1000; // 1 minuto
 
 /* ------------------------------------------------------------------ */
 
-const audio = document.getElementById("radio");
+const frame = document.getElementById("radioFrame");
 let currentUrl = null;
 
 function parseCsvCell(text) {
@@ -71,25 +74,20 @@ async function obtenerUrlDeSheet() {
   return url;
 }
 
-async function actualizarEstacion(esPrimeraCarga) {
+async function actualizarEstacion() {
   try {
     const url = await obtenerUrlDeSheet();
     if (url !== currentUrl) {
       currentUrl = url;
-      const estabaSonando = !audio.paused;
-      audio.src = url;
-      audio.load();
-      if (esPrimeraCarga || estabaSonando) audio.play().catch(() => {});
+      frame.src = url;
     }
   } catch (err) {
     console.error(err);
   }
 }
 
-audio.addEventListener("stalled", () => audio.load());
-
-actualizarEstacion(true);
-setInterval(() => actualizarEstacion(false), CHECK_INTERVAL_MS);
+actualizarEstacion();
+setInterval(actualizarEstacion, CHECK_INTERVAL_MS);
 
 </script>
 
