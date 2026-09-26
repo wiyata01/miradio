@@ -14,7 +14,6 @@
     padding: 0;
     height: 100%;
     background: #111;
-    font-family: Arial, Helvetica, sans-serif;
   }
 
   body {
@@ -23,50 +22,8 @@
     justify-content: center;
   }
 
-  .player {
-    width: min(90%, 420px);
-    background: #1c1c1c;
-    border-radius: 20px;
-    padding: 32px 26px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.5);
-    text-align: center;
-  }
-
-  .icon {
-    font-size: 46px;
-    margin-bottom: 10px;
-  }
-
-  .status {
-    color: #aaa;
-    font-size: 14px;
-    min-height: 18px;
-    margin-bottom: 18px;
-  }
-
   audio {
-    width: 100%;
-  }
-
-  .unlock-btn {
-    margin-top: 18px;
-    width: 100%;
-    padding: 14px;
-    border: none;
-    border-radius: 10px;
-    background: #4c8bf5;
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-  }
-
-  .unlock-btn:hover {
-    background: #6a9dfb;
-  }
-
-  .hidden {
-    display: none;
+    width: min(90%, 420px);
   }
 
 </style>
@@ -74,12 +31,7 @@
 
 <body>
 
-<div class="player">
-  <div class="icon">📻</div>
-  <div class="status" id="status">Cargando estación…</div>
-  <audio id="radio" controls preload="auto"></audio>
-  <button class="unlock-btn hidden" id="unlockBtn">▶ Toca para reproducir</button>
-</div>
+<audio id="radio" controls autoplay preload="auto"></audio>
 
 <script>
 
@@ -99,14 +51,11 @@ const CHECK_INTERVAL_MS = 60 * 1000; // 1 minuto
 
 /* ------------------------------------------------------------------ */
 
-const audio     = document.getElementById("radio");
-const statusEl  = document.getElementById("status");
-const unlockBtn = document.getElementById("unlockBtn");
-
+const audio = document.getElementById("radio");
 let currentUrl = null;
+let autoplayBloqueado = false;
 
 function parseCsvCell(text) {
-  // La API de Google devuelve algo como: "https://ejemplo.com/stream"
   let t = text.trim();
   if (t.startsWith('"') && t.endsWith('"')) {
     t = t.slice(1, -1).replace(/""/g, '"');
@@ -126,50 +75,33 @@ async function obtenerUrlDeSheet() {
 function intentarReproducir() {
   const p = audio.play();
   if (p && p.catch) {
-    p.then(() => {
-      unlockBtn.classList.add("hidden");
-      statusEl.textContent = "Transmitiendo en vivo";
-    }).catch(() => {
-      // El navegador bloqueó el autoplay: se necesita un toque del usuario
-      unlockBtn.classList.remove("hidden");
-      statusEl.textContent = "Lista para reproducir";
-    });
+    p.then(() => { autoplayBloqueado = false; })
+     .catch(() => { autoplayBloqueado = true; });
   }
 }
 
 async function actualizarEstacion(esPrimeraCarga) {
   try {
     const url = await obtenerUrlDeSheet();
-
     if (url !== currentUrl) {
       currentUrl = url;
       const estabaSonando = !audio.paused;
-
       audio.src = url;
       audio.load();
-
-      if (esPrimeraCarga || estabaSonando) {
-        intentarReproducir();
-      } else {
-        statusEl.textContent = "Lista para reproducir";
-        unlockBtn.classList.remove("hidden");
-      }
+      if (esPrimeraCarga || estabaSonando) intentarReproducir();
     }
   } catch (err) {
     console.error(err);
-    statusEl.textContent = "Error al leer la estación: " + err.message;
   }
 }
 
-unlockBtn.addEventListener("click", () => {
-  intentarReproducir();
-});
+// Si el navegador bloqueó el autoplay, el primer toque/clic en la página
+// (en cualquier parte, sin botón visible) activa la reproducción.
+document.addEventListener("click", () => {
+  if (autoplayBloqueado) intentarReproducir();
+}, { once: false });
 
-// Si el audio se corta por algún motivo (red, etc.), reintenta solo
 audio.addEventListener("stalled", () => audio.load());
-audio.addEventListener("error", () => {
-  statusEl.textContent = "Error de conexión con la emisora, reintentando…";
-});
 
 actualizarEstacion(true);
 setInterval(() => actualizarEstacion(false), CHECK_INTERVAL_MS);
