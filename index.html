@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radio en Vivo</title>
+
+<style>
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #111;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .player {
+    width: min(90%, 420px);
+    background: #1c1c1c;
+    border-radius: 20px;
+    padding: 32px 26px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.5);
+    text-align: center;
+  }
+
+  .icon {
+    font-size: 46px;
+    margin-bottom: 10px;
+  }
+
+  .status {
+    color: #aaa;
+    font-size: 14px;
+    min-height: 18px;
+    margin-bottom: 18px;
+  }
+
+  audio {
+    width: 100%;
+  }
+
+  .unlock-btn {
+    margin-top: 18px;
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #4c8bf5;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  .unlock-btn:hover {
+    background: #6a9dfb;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+</style>
+</head>
+
+<body>
+
+<div class="player">
+  <div class="icon">📻</div>
+  <div class="status" id="status">Cargando estación…</div>
+  <audio id="radio" controls preload="auto"></audio>
+  <button class="unlock-btn hidden" id="unlockBtn">▶ Toca para reproducir</button>
+</div>
+
+<script>
+
+/* ------------------------------------------------------------------
+   CONFIGURACIÓN: id de la hoja, gid de la pestaña, y celda a leer
+   ------------------------------------------------------------------ */
+
+const SHEET_ID   = "1JWbCKHveAwhpcwN414iWu_HqMYppONntmYs8d7ix0QU";
+const SHEET_GID  = "0";
+const CELL_RANGE = "A1";
+
+const SHEET_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+  `?tqx=out:csv&gid=${SHEET_GID}&range=${CELL_RANGE}`;
+
+const CHECK_INTERVAL_MS = 60 * 1000; // 1 minuto
+
+/* ------------------------------------------------------------------ */
+
+const audio     = document.getElementById("radio");
+const statusEl  = document.getElementById("status");
+const unlockBtn = document.getElementById("unlockBtn");
+
+let currentUrl = null;
+
+function parseCsvCell(text) {
+  // La API de Google devuelve algo como: "https://ejemplo.com/stream"
+  let t = text.trim();
+  if (t.startsWith('"') && t.endsWith('"')) {
+    t = t.slice(1, -1).replace(/""/g, '"');
+  }
+  return t.trim();
+}
+
+async function obtenerUrlDeSheet() {
+  const resp = await fetch(SHEET_URL + "&_=" + Date.now(), { cache: "no-store" });
+  if (!resp.ok) throw new Error("No se pudo leer la hoja (HTTP " + resp.status + ")");
+  const text = await resp.text();
+  const url = parseCsvCell(text);
+  if (!url) throw new Error("La celda " + CELL_RANGE + " está vacía");
+  return url;
+}
+
+function intentarReproducir() {
+  const p = audio.play();
+  if (p && p.catch) {
+    p.then(() => {
+      unlockBtn.classList.add("hidden");
+      statusEl.textContent = "Transmitiendo en vivo";
+    }).catch(() => {
+      // El navegador bloqueó el autoplay: se necesita un toque del usuario
+      unlockBtn.classList.remove("hidden");
+      statusEl.textContent = "Lista para reproducir";
+    });
+  }
+}
+
+async function actualizarEstacion(esPrimeraCarga) {
+  try {
+    const url = await obtenerUrlDeSheet();
+
+    if (url !== currentUrl) {
+      currentUrl = url;
+      const estabaSonando = !audio.paused;
+
+      audio.src = url;
+      audio.load();
+
+      if (esPrimeraCarga || estabaSonando) {
+        intentarReproducir();
+      } else {
+        statusEl.textContent = "Lista para reproducir";
+        unlockBtn.classList.remove("hidden");
+      }
+    }
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Error al leer la estación: " + err.message;
+  }
+}
+
+unlockBtn.addEventListener("click", () => {
+  intentarReproducir();
+});
+
+// Si el audio se corta por algún motivo (red, etc.), reintenta solo
+audio.addEventListener("stalled", () => audio.load());
+audio.addEventListener("error", () => {
+  statusEl.textContent = "Error de conexión con la emisora, reintentando…";
+});
+
+actualizarEstacion(true);
+setInterval(() => actualizarEstacion(false), CHECK_INTERVAL_MS);
+
+</script>
+
+</body>
+</html>
